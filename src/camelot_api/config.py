@@ -24,7 +24,7 @@ class Config:
 
     # 文件上传
     upload_dir: str = field(
-        default_factory=lambda: os.getenv("UPLOAD_DIR", "/var/lib/camelot-api/uploads")
+        default_factory=lambda: os.getenv("UPLOAD_DIR", os.path.expanduser("~/.camelot-api/uploads"))
     )
     upload_max_size_mb: int = field(
         default_factory=lambda: int(os.getenv("UPLOAD_MAX_SIZE_MB", os.getenv("MAX_PDF_SIZE_MB", "200")))
