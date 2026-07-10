@@ -5,7 +5,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends ghostscript \
 
 WORKDIR /app
 COPY pyproject.toml uv.lock ./
-RUN uv sync --frozen --no-dev
 COPY src/ src/
 RUN uv sync --frozen --no-dev
 

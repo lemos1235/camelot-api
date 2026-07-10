@@ -99,9 +99,9 @@ After=network.target
 
 [Service]
 Type=simple
-User=nobody
+User=$USER
 WorkingDirectory=/opt/camelot-api
-ExecStart=/root/.local/bin/uv run uvicorn camelot_api.server:app --host 127.0.0.1 --port 8000
+ExecStart=/opt/camelot-api/.venv/bin/uvicorn camelot_api.server:app --host 127.0.0.1 --port 8000
 Restart=always
 RestartSec=5
 Environment=LOG_LEVEL=INFO
