@@ -14,14 +14,47 @@ uv run camelot-api --port 8000
 | 方法 | 路径 | 说明 |
 |------|------|------|
 | `GET` | `/health` | 健康检查 |
-| `POST` | `/api/v1/extract` | 提取 PDF 表格 |
+| `POST` | `/api/v1/files/upload` | 上传 PDF 文件（返回 file_id，自动 MD5 去重） |
+| `DELETE` | `/api/v1/files/{file_id}` | 删除已上传的文件及缓存 |
+| `POST` | `/api/v1/extract` | 提取 PDF 表格（支持 file_id / file_path） |
 
-### 请求示例
+### 上传文件
+
+```bash
+curl -X POST http://localhost:8000/api/v1/files/upload \
+  -F "file=@/path/to/input.pdf"
+```
+
+响应：
+```json
+{
+  "file_id": "a1b2c3d4...",
+  "filename": "input.pdf",
+  "size": 123456,
+  "md5": "d41d8cd98f00b204e9800998ecf8427e",
+  "cached": false,
+  "created_at": "2026-07-10T10:00:00Z"
+}
+```
+
+- 同一文件（MD5 相同）重复上传会直接返回已有 `file_id`（`cached: true`），不重复存储
+
+### 提取表格（使用 file_id，推荐）
 
 ```bash
 curl -X POST http://localhost:8000/api/v1/extract \
   -H "Content-Type: application/json" \
-  -d '{"file_path":"/path/to/input.pdf","pages":"all","flavor":"lattice"}'
+  -d '{"file_id":"a1b2c3d4...","pages":"all","flavor":"lattice"}'
+```
+
+- 相同 `file_id` + 相同参数会自动命中结果缓存，秒级返回
+
+### 提取表格（使用 file_path，向后兼容）
+
+```bash
+curl -X POST http://localhost:8000/api/v1/extract \
+  -H "Content-Type: application/json" \
+  -d '{"file_path":"/data/pdf/input.pdf","pages":"all","flavor":"lattice"}'
 ```
 
 ### 响应结构
@@ -68,6 +101,11 @@ curl -X POST http://localhost:8000/api/v1/extract \
 | `CAMELOT_DEFAULT_FLAVOR` | `lattice` | 默认解析模式 |
 | `CAMELOT_FALLBACK_STREAM` | `true` | lattice 无结果时回退 stream |
 | `MAX_PDF_SIZE_MB` | `200` | PDF 文件大小上限 |
+| `UPLOAD_DIR` | `/var/lib/camelot-api/uploads` | 上传文件存储目录 |
+| `UPLOAD_MAX_SIZE_MB` | `200` | 上传文件大小上限 (MB) |
+| `UPLOAD_TTL_HOURS` | `24` | 上传文件保留时长（小时），过期后定时清理 |
+| `UPLOAD_CLEANUP_INTERVAL_MINUTES` | `30` | 定时清理间隔（分钟） |
+| `CACHE_MAX_ENTRIES` | `1000` | 结果缓存最大条目数 |
 
 ## 服务器部署
 

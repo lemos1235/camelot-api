@@ -22,6 +22,25 @@ class Config:
     default_line_scale: int = field(default_factory=lambda: int(os.getenv("CAMELOT_LINE_SCALE", "15")))
     max_pdf_size_mb: int = field(default_factory=lambda: int(os.getenv("MAX_PDF_SIZE_MB", "200")))
 
+    # 文件上传
+    upload_dir: str = field(
+        default_factory=lambda: os.getenv("UPLOAD_DIR", "/var/lib/camelot-api/uploads")
+    )
+    upload_max_size_mb: int = field(
+        default_factory=lambda: int(os.getenv("UPLOAD_MAX_SIZE_MB", os.getenv("MAX_PDF_SIZE_MB", "200")))
+    )
+    upload_ttl_hours: int = field(
+        default_factory=lambda: int(os.getenv("UPLOAD_TTL_HOURS", "24"))
+    )
+    upload_cleanup_interval_minutes: int = field(
+        default_factory=lambda: int(os.getenv("UPLOAD_CLEANUP_INTERVAL_MINUTES", "30"))
+    )
+
+    # 结果缓存
+    cache_max_entries: int = field(
+        default_factory=lambda: int(os.getenv("CACHE_MAX_ENTRIES", "1000"))
+    )
+
 
 _config: Config | None = None
 

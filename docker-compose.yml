@@ -17,8 +17,14 @@ services:
       - CAMELOT_DEFAULT_FLAVOR=${CAMELOT_DEFAULT_FLAVOR:-lattice}
       - CAMELOT_FALLBACK_STREAM=${CAMELOT_FALLBACK_STREAM:-true}
       - MAX_PDF_SIZE_MB=${MAX_PDF_SIZE_MB:-200}
+      - UPLOAD_DIR=${UPLOAD_DIR:-/var/lib/camelot-api/uploads}
+      - UPLOAD_MAX_SIZE_MB=${UPLOAD_MAX_SIZE_MB:-200}
+      - UPLOAD_TTL_HOURS=${UPLOAD_TTL_HOURS:-24}
+      - UPLOAD_CLEANUP_INTERVAL_MINUTES=${UPLOAD_CLEANUP_INTERVAL_MINUTES:-30}
+      - CACHE_MAX_ENTRIES=${CACHE_MAX_ENTRIES:-1000}
     volumes:
       - ${PDF_DATA_DIR:-./data/pdf}:/data/pdf:ro
+      - ${UPLOAD_DATA_DIR:-./data/uploads}:/var/lib/camelot-api/uploads
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s

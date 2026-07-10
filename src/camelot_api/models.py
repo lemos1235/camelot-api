@@ -5,11 +5,11 @@
 
 from __future__ import annotations
 
+from datetime import datetime
 from pathlib import Path
 from typing import Literal
 
-import pydantic
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from .errors import ErrorCode
 
@@ -47,7 +47,8 @@ class TableInfo(BaseModel):
 class ExtractRequest(BaseModel):
     """表格提取请求 — 暴露 camelot.read_pdf 的全部参数。"""
 
-    file_path: str = Field(description="PDF 文件的本地绝对路径")
+    file_path: str | None = Field(default=None, description="PDF 文件的本地绝对路径（与 file_id 二选一）")
+    file_id: str | None = Field(default=None, description="通过 /api/v1/files/upload 获取的文件 ID（与 file_path 二选一）")
     pages: str = Field(default="all", description="页码范围：'all' / '1' / '1-3' / '1,3,5'")
     flavor: Literal["lattice", "stream"] = Field(default="lattice", description="lattice=有边框表格，stream=无边框表格")
 
@@ -75,17 +76,23 @@ class ExtractRequest(BaseModel):
     flag_size: bool = Field(default=False, description="是否检测字体大小（较慢）")
     process_background: bool = Field(default=False, description="是否处理背景")
 
-    @pydantic.field_validator("file_path")
-    @classmethod
-    def file_must_exist(cls, v: str) -> str:
-        path = Path(v)
-        if not path.exists():
-            raise ValueError(f"文件不存在: {v}")
-        if not path.is_file():
-            raise ValueError(f"不是文件: {v}")
-        if path.suffix.lower() != ".pdf":
-            raise ValueError(f"不是 PDF 文件: {v}")
-        return str(path.resolve())
+    @model_validator(mode="after")
+    def validate_file_source(self) -> ExtractRequest:
+        """确保 file_path 和 file_id 二选一。"""
+        if self.file_path and self.file_id:
+            raise ValueError("file_path 和 file_id 不能同时提供，请二选一")
+        if not self.file_path and not self.file_id:
+            raise ValueError("必须提供 file_path 或 file_id")
+        if self.file_path:
+            path = Path(self.file_path)
+            if not path.exists():
+                raise ValueError(f"文件不存在: {self.file_path}")
+            if not path.is_file():
+                raise ValueError(f"不是文件: {self.file_path}")
+            if path.suffix.lower() != ".pdf":
+                raise ValueError(f"不是 PDF 文件: {self.file_path}")
+            self.file_path = str(path.resolve())
+        return self
 
 
 class ErrorDetail(BaseModel):
@@ -107,3 +114,19 @@ class HealthResponse(BaseModel):
     status: str = "ok"
     version: str = Field(description="服务版本")
     camelot_available: bool = Field(description="camelot 库是否可用")
+
+
+class UploadResponse(BaseModel):
+    """文件上传响应。"""
+    file_id: str = Field(description="文件唯一标识")
+    filename: str = Field(description="原始文件名")
+    size: int = Field(description="文件大小（字节）")
+    md5: str = Field(description="文件 MD5 哈希")
+    cached: bool = Field(description="是否已存在（MD5 去重命中）")
+    created_at: datetime = Field(description="创建时间")
+
+
+class FileDeleteResponse(BaseModel):
+    """文件删除响应。"""
+    file_id: str = Field(description="文件 ID")
+    deleted: bool = Field(description="是否成功删除")

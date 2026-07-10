@@ -8,5 +8,7 @@ COPY pyproject.toml uv.lock ./
 COPY src/ src/
 RUN uv sync --frozen --no-dev
 
+RUN mkdir -p /var/lib/camelot-api/uploads
+
 EXPOSE 8000
 CMD ["uv", "run", "uvicorn", "camelot_api.server:app", "--host", "0.0.0.0", "--port", "8000"]
