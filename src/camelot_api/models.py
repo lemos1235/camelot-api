@@ -47,8 +47,9 @@ class TableInfo(BaseModel):
 class ExtractRequest(BaseModel):
     """表格提取请求 — 暴露 camelot.read_pdf 的全部参数。"""
 
-    file_path: str | None = Field(default=None, description="PDF 文件的本地绝对路径（与 file_id 二选一）")
-    file_id: str | None = Field(default=None, description="通过 /api/v1/files/upload 获取的文件 ID（与 file_path 二选一）")
+    file_path: str | None = Field(default=None, description="PDF 文件的本地绝对路径（与 file_id / file_url 三选一）")
+    file_id: str | None = Field(default=None, description="通过 /api/v1/files/upload 获取的文件 ID（与 file_path / file_url 三选一）")
+    file_url: str | None = Field(default=None, description="可公开访问的 PDF 下载 URL（与 file_path / file_id 三选一），自动下载后提取")
     pages: str = Field(default="all", description="页码范围：'all' / '1' / '1-3' / '1,3,5'")
     flavor: Literal["lattice", "stream"] = Field(default="lattice", description="lattice=有边框表格，stream=无边框表格")
 
@@ -78,11 +79,12 @@ class ExtractRequest(BaseModel):
 
     @model_validator(mode="after")
     def validate_file_source(self) -> ExtractRequest:
-        """确保 file_path 和 file_id 二选一。"""
-        if self.file_path and self.file_id:
-            raise ValueError("file_path 和 file_id 不能同时提供，请二选一")
-        if not self.file_path and not self.file_id:
-            raise ValueError("必须提供 file_path 或 file_id")
+        """确保 file_path / file_id / file_url 三选一。"""
+        provided = sum(1 for v in (self.file_path, self.file_id, self.file_url) if v)
+        if provided == 0:
+            raise ValueError("必须提供 file_path / file_id / file_url 之一")
+        if provided > 1:
+            raise ValueError("file_path / file_id / file_url 只能提供其中一个")
         if self.file_path:
             path = Path(self.file_path)
             if not path.exists():

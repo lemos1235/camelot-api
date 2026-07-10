@@ -19,6 +19,11 @@ class ErrorCode(str, Enum):
     NO_TABLES_FOUND = "NO_TABLES_FOUND"
     INTERNAL_ERROR = "INTERNAL_ERROR"
 
+    # URL 下载相关
+    FILE_URL_INVALID = "FILE_URL_INVALID"
+    FILE_URL_DOWNLOAD_FAILED = "FILE_URL_DOWNLOAD_FAILED"
+    FILE_URL_TOO_LARGE = "FILE_URL_TOO_LARGE"
+
 
 class AppError(Exception):
     """应用层异常，携带 machine-readable error_code。"""

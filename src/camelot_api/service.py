@@ -6,6 +6,9 @@ import hashlib
 import json
 import threading
 import time
+import urllib.error
+import urllib.parse
+import urllib.request
 import uuid
 import warnings
 from datetime import datetime, timedelta, timezone
@@ -260,6 +263,131 @@ def cleanup_expired_files() -> int:
 
 
 # ---------------------------------------------------------------------------
+# URL 下载
+# ---------------------------------------------------------------------------
+
+
+def _download_from_url(file_url: str) -> tuple[str, Path]:
+    """从 URL 下载 PDF 文件，进行 MD5 去重并注册到文件注册表。
+
+    流程：
+    1. 校验 URL scheme（仅支持 http / https）
+    2. 流式下载，边读边计算 MD5，同时检查大小上限
+    3. 校验 PDF 魔数
+    4. MD5 去重（命中则直接返回已有 file_id）
+    5. 未命中则写入磁盘并注册
+
+    返回 (file_id, Path)
+    """
+    cfg = get_config()
+
+    # 1. 校验 URL scheme
+    parsed = urllib.parse.urlparse(file_url)
+    if parsed.scheme not in ("http", "https"):
+        raise AppError(
+            ErrorCode.FILE_URL_INVALID,
+            f"不支持的 URL 协议: {parsed.scheme}，仅支持 http / https",
+        )
+
+    max_bytes = cfg.download_max_size_mb * 1024 * 1024
+    timeout = cfg.download_timeout_seconds
+
+    # 2. 发起 GET 请求
+    req = urllib.request.Request(file_url, method="GET")
+    try:
+        response = urllib.request.urlopen(req, timeout=timeout)
+    except (urllib.error.URLError, OSError, ValueError) as e:
+        raise AppError(
+            ErrorCode.FILE_URL_DOWNLOAD_FAILED,
+            f"下载失败: {e}",
+        ) from e
+
+    # 检查 HTTP 状态码
+    status_code = response.getcode()
+    if status_code != 200:
+        response.close()
+        raise AppError(
+            ErrorCode.FILE_URL_DOWNLOAD_FAILED,
+            f"服务器返回非 200 状态码: {status_code}",
+        )
+
+    # 检查 Content-Length（如有）
+    content_length = response.headers.get("Content-Length")
+    if content_length is not None:
+        length = int(content_length)
+        if length > max_bytes:
+            response.close()
+            raise AppError(
+                ErrorCode.FILE_URL_TOO_LARGE,
+                f"文件大小 {length} 字节超过上限 {cfg.download_max_size_mb}MB",
+            )
+
+    # 3. 流式读取响应体，积累内存 + 计算 MD5
+    chunk_size = 64 * 1024  # 64KB
+    content_parts: list[bytes] = []
+    total = 0
+    md5_hash = hashlib.md5()  # noqa: S324
+    try:
+        while True:
+            chunk = response.read(chunk_size)
+            if not chunk:
+                break
+            content_parts.append(chunk)
+            md5_hash.update(chunk)
+            total += len(chunk)
+            if total > max_bytes:
+                response.close()
+                raise AppError(
+                    ErrorCode.FILE_URL_TOO_LARGE,
+                    f"下载内容超过上限 {cfg.download_max_size_mb}MB",
+                )
+    except (urllib.error.URLError, OSError) as e:
+        raise AppError(
+            ErrorCode.FILE_URL_DOWNLOAD_FAILED,
+            f"下载中断: {e}",
+        ) from e
+    finally:
+        response.close()
+
+    content = b"".join(content_parts)
+    file_md5 = md5_hash.hexdigest()
+
+    # 4. 校验 PDF 魔数
+    if len(content) < 4 or content[:4] != b"%PDF":
+        raise AppError(ErrorCode.NOT_A_PDF, "下载的文件不是有效的 PDF（魔数校验失败）")
+
+    # 5. MD5 去重
+    filename = Path(urllib.parse.unquote(parsed.path)).name or "downloaded.pdf"
+
+    with _registry_lock:
+        if file_md5 in _md5_index:
+            existing_id = _md5_index[file_md5]
+            info = _registry[existing_id]
+            logger.info("md5 dedup hit: file_url → existing file_id=%s", existing_id)
+            return (existing_id, Path(info["path"]))
+
+        # 6. 写入磁盘并注册
+        file_id = uuid.uuid4().hex
+        upload_dir = _ensure_upload_dir()
+        dest = upload_dir / f"{file_id}.pdf"
+        dest.write_bytes(content)
+
+        now = datetime.now(tz=timezone.utc)
+        _registry[file_id] = {
+            "filename": filename,
+            "path": str(dest),
+            "size": total,
+            "md5": file_md5,
+            "created_at": now.isoformat(),
+        }
+        _md5_index[file_md5] = file_id
+        _save_registry()
+
+    logger.info("file downloaded: id=%s name=%s size=%d url=%s", file_id, filename, total, file_url)
+    return (file_id, dest)
+
+
+# ---------------------------------------------------------------------------
 # 结果缓存
 # ---------------------------------------------------------------------------
 
@@ -424,12 +552,31 @@ def _do_extract(file_path: str, request: ExtractRequest) -> ExtractResponse:
 
 
 def extract_tables(request: ExtractRequest) -> ExtractResponse:
-    """执行 PDF 表格提取，支持 file_path / file_id，带结果缓存。
+    """执行 PDF 表格提取，支持 file_path / file_id / file_url，带结果缓存。
 
     - file_path 模式：直接使用本地路径，不走缓存（向后兼容）
     - file_id 模式：resolve 路径后，先查缓存再执行提取
+    - file_url 模式：自动下载文件并注册，然后走 file_id 的缓存+提取流程
     """
     try:
+        if request.file_url:
+            # file_url 模式：下载 + MD5 去重 + 注册，然后走缓存
+            file_id, _ = _download_from_url(request.file_url)
+
+            # 复用 file_id 的缓存和提取逻辑
+            cache_key = _make_cache_key(file_id, request)
+            cached = _cache_get(cache_key)
+            if cached is not None:
+                logger.info("cache hit: file_url → file_id=%s key=%s", file_id, cache_key[:12])
+                return cached
+
+            file_path = str(resolve_file(file_id))
+            result = _do_extract(file_path, request)
+
+            if result.success:
+                _cache_set(cache_key, result)
+            return result
+
         if request.file_id:
             # file_id 模式：支持缓存
             cache_key = _make_cache_key(request.file_id, request)

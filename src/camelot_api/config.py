@@ -41,6 +41,16 @@ class Config:
         default_factory=lambda: int(os.getenv("CACHE_MAX_ENTRIES", "1000"))
     )
 
+    # URL 下载
+    download_timeout_seconds: int = field(
+        default_factory=lambda: int(os.getenv("URL_DOWNLOAD_TIMEOUT_SECONDS", "30"))
+    )
+    download_max_size_mb: int = field(
+        default_factory=lambda: int(
+            os.getenv("URL_MAX_SIZE_MB", os.getenv("UPLOAD_MAX_SIZE_MB", "200"))
+        )
+    )
+
 
 _config: Config | None = None
 
