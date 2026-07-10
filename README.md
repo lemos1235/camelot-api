@@ -120,24 +120,27 @@ sudo systemctl status camelot-api
 journalctl -u camelot-api -f
 ```
 
-### 方式二：Docker
+### 方式二：Docker Compose（推荐）
 
-```dockerfile
-# Dockerfile
-FROM ghcr.io/astral-sh/uv:python3.11-bookworm
+```bash
+# 1. 准备环境变量（可选）
+cp .env.example .env
+# 按需编辑 .env
 
-RUN apt-get update && apt-get install -y --no-install-recommends ghostscript \
-    && rm -rf /var/lib/apt/lists/*
+# 2. 创建 PDF 数据目录
+mkdir -p data/pdf
 
-WORKDIR /app
-COPY pyproject.toml uv.lock ./
-RUN uv sync --frozen --no-dev
-COPY src/ src/
-RUN uv sync --frozen --no-dev
+# 3. 构建并启动
+docker compose up -d
 
-EXPOSE 8000
-CMD ["uv", "run", "uvicorn", "camelot_api.server:app", "--host", "0.0.0.0", "--port", "8000"]
+# 4. 查看日志
+docker compose logs -f
+
+# 5. 停止
+docker compose down
 ```
+
+### 方式三：Docker（手动构建）
 
 ```bash
 # 构建
@@ -152,26 +155,6 @@ docker run -d \
   camelot-api
 ```
 
-### 方式三：反向代理（nginx）
-
-如果需要在生产环境暴露，建议前面放 nginx：
-
-```nginx
-server {
-    listen 80;
-    server_name camelot-api.example.com;
-
-    client_max_body_size 200m;
-
-    location / {
-        proxy_pass http://127.0.0.1:8000;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_read_timeout 120s;
-    }
-}
-```
-
 ## 项目结构
 
 ```
@@ -179,7 +162,9 @@ camelot-api/
 ├── pyproject.toml
 ├── .python-version
 ├── .gitignore
+├── .env.example             # Docker Compose 环境变量示例
 ├── Dockerfile
+├── docker-compose.yml       # Docker Compose 编排
 └── src/
     └── camelot_api/
         ├── __init__.py      # main() → 控制台入口
