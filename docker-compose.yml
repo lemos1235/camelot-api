@@ -3,30 +3,21 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    image: camelot-api:latest
     container_name: camelot-api
     restart: unless-stopped
     ports:
-      - "${HOST_BIND:-127.0.0.1}:${PORT:-8000}:8000"
-    environment:
-      - HOST=0.0.0.0
-      - PORT=8000
-      - WORKERS=${WORKERS:-1}
-      - LOG_LEVEL=${LOG_LEVEL:-INFO}
-      - LOG_FORMAT=${LOG_FORMAT:-json}
-      - CAMELOT_DEFAULT_FLAVOR=${CAMELOT_DEFAULT_FLAVOR:-lattice}
-      - CAMELOT_FALLBACK_STREAM=${CAMELOT_FALLBACK_STREAM:-true}
-      - MAX_PDF_SIZE_MB=${MAX_PDF_SIZE_MB:-200}
-      - UPLOAD_DIR=${UPLOAD_DIR:-/var/lib/camelot-api/uploads}
-      - UPLOAD_MAX_SIZE_MB=${UPLOAD_MAX_SIZE_MB:-200}
-      - UPLOAD_TTL_HOURS=${UPLOAD_TTL_HOURS:-24}
-      - UPLOAD_CLEANUP_INTERVAL_MINUTES=${UPLOAD_CLEANUP_INTERVAL_MINUTES:-30}
-      - CACHE_MAX_ENTRIES=${CACHE_MAX_ENTRIES:-1000}
+      - "127.0.0.1:8000:8000"
+    env_file:
+      - path: .env
+        required: false
     volumes:
-      - ${PDF_DATA_DIR:-./data/pdf}:/data/pdf:ro
-      - ${UPLOAD_DATA_DIR:-./data/uploads}:/var/lib/camelot-api/uploads
+      - ./data/uploads:/data/uploads
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      test:
+        - CMD
+        - python3
+        - -c
+        - "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8000/health',timeout=5).status==200 else 1)"
       interval: 30s
       timeout: 10s
       retries: 3

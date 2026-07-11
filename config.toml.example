@@ -1,0 +1,31 @@
+# =============================================================================
+# camelot-api 配置文件
+# 复制为 config.toml 后按需修改。优先级：环境变量 > 本文件 > 内置默认值。
+# 加载路径可由环境变量 CONFIG_FILE 覆盖（默认 config.toml）。
+# =============================================================================
+
+# 服务
+host = "0.0.0.0"          # 监听地址（容器内恒 0.0.0.0）
+port = 8000               # 监听端口（容器内恒 8000，对外端口由 docker-compose 控制）
+workers = 1               # uvicorn worker 数量
+log_level = "INFO"        # DEBUG / INFO / WARNING / ERROR
+log_format = "text"       # text / json
+
+# camelot
+default_flavor = "lattice"   # lattice / stream
+fallback_to_stream = true    # lattice 无结果时回退 stream
+line_scale = 15              # 线条缩放参数
+max_pdf_size_mb = 200        # PDF 大小基线 (MB)，作为上传 / 下载大小上限的默认值
+
+# 上传
+upload_dir = "~/.camelot-api/uploads"   # ~ 会被展开；容器内由 Dockerfile ENV 覆盖为 /data/uploads
+upload_max_size_mb = 200                # 未设则复用 max_pdf_size_mb
+upload_ttl_hours = 24                   # 上传文件保留时长（小时），过期后定时清理
+upload_cleanup_interval_minutes = 30    # 定时清理间隔（分钟）
+
+# 结果缓存
+cache_max_entries = 1000                # 内存 LRU 缓存最大条目数
+
+# URL 下载
+url_download_timeout_seconds = 30       # 远程 PDF 下载超时（秒）
+url_max_size_mb = 200                   # 远程 PDF 大小上限 (MB)，未设则复用 upload_max_size_mb

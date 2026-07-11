@@ -6,7 +6,6 @@
 from __future__ import annotations
 
 from datetime import datetime
-from pathlib import Path
 from typing import Literal
 
 from pydantic import BaseModel, Field, model_validator
@@ -47,9 +46,8 @@ class TableInfo(BaseModel):
 class ExtractRequest(BaseModel):
     """表格提取请求 — 暴露 camelot.read_pdf 的全部参数。"""
 
-    file_path: str | None = Field(default=None, description="PDF 文件的本地绝对路径（与 file_id / file_url 三选一）")
-    file_id: str | None = Field(default=None, description="通过 /api/v1/files/upload 获取的文件 ID（与 file_path / file_url 三选一）")
-    file_url: str | None = Field(default=None, description="可公开访问的 PDF 下载 URL（与 file_path / file_id 三选一），自动下载后提取")
+    file_id: str | None = Field(default=None, description="通过 /api/v1/files/upload 获取的文件 ID（与 file_url 二选一）")
+    file_url: str | None = Field(default=None, description="可公开访问的 PDF 下载 URL（与 file_id 二选一），自动下载后提取")
     pages: str = Field(default="all", description="页码范围：'all' / '1' / '1-3' / '1,3,5'")
     flavor: Literal["lattice", "stream"] = Field(default="lattice", description="lattice=有边框表格，stream=无边框表格")
 
@@ -79,21 +77,12 @@ class ExtractRequest(BaseModel):
 
     @model_validator(mode="after")
     def validate_file_source(self) -> ExtractRequest:
-        """确保 file_path / file_id / file_url 三选一。"""
-        provided = sum(1 for v in (self.file_path, self.file_id, self.file_url) if v)
+        """确保 file_id / file_url 二选一。"""
+        provided = sum(1 for v in (self.file_id, self.file_url) if v)
         if provided == 0:
-            raise ValueError("必须提供 file_path / file_id / file_url 之一")
+            raise ValueError("必须提供 file_id / file_url 之一")
         if provided > 1:
-            raise ValueError("file_path / file_id / file_url 只能提供其中一个")
-        if self.file_path:
-            path = Path(self.file_path)
-            if not path.exists():
-                raise ValueError(f"文件不存在: {self.file_path}")
-            if not path.is_file():
-                raise ValueError(f"不是文件: {self.file_path}")
-            if path.suffix.lower() != ".pdf":
-                raise ValueError(f"不是 PDF 文件: {self.file_path}")
-            self.file_path = str(path.resolve())
+            raise ValueError("file_id / file_url 只能提供其中一个")
         return self
 
 

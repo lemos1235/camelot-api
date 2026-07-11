@@ -1,15 +1,15 @@
 """FastAPI HTTP 服务。
 
 启动方式:
-    uv run camelot-api --port 8000
-    uv run python -m camelot_api --port 8000
-    uv run uvicorn camelot_api.server:app --host 0.0.0.0 --port 8000
+    uv run camelot-api
+    uv run python -m camelot_api
+    uv run uvicorn camelot_api.server:app
 
 API:
     GET  /health                      结构化健康检查
     POST /api/v1/files/upload         上传 PDF 文件（返回 file_id）
     DELETE /api/v1/files/{file_id}    手动删除文件及缓存
-    POST /api/v1/extract              提取 PDF 表格（支持 file_id / file_path / file_url）
+    POST /api/v1/extract              提取 PDF 表格（支持 file_id / file_url）
 """
 
 from __future__ import annotations
@@ -111,7 +111,6 @@ async def global_exception_handler(request: Request, exc: Exception) -> JSONResp
 async def app_error_handler(request: Request, exc: AppError) -> JSONResponse:
     """AppError 统一返回结构化错误。"""
     status_map = {
-        ErrorCode.FILE_NOT_FOUND: 404,
         ErrorCode.FILE_ID_NOT_FOUND: 404,
         ErrorCode.FILE_TOO_LARGE: 413,
         ErrorCode.NOT_A_PDF: 400,
@@ -174,10 +173,9 @@ async def remove_file(file_id: str) -> FileDeleteResponse:
 async def extract(request: ExtractRequest) -> ExtractResponse:
     """提取 PDF 中的表格，返回表格及单元格的布局信息（含 bbox）。
 
-    支持三种方式：
-    - file_id:   通过 /api/v1/files/upload 获取的文件 ID（推荐，支持结果缓存）
+    支持两种方式：
+    - file_id:   通过 /api/v1/files/upload 获取的文件 ID（支持结果缓存）
     - file_url:  可公开访问的 PDF URL（自动下载、去重，支持结果缓存）
-    - file_path: 服务器本地 PDF 路径（向后兼容，不走缓存）
 
     Rust 侧用 reqwest 等 HTTP 客户端 POST JSON 即可调用。
     """

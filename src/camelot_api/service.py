@@ -461,17 +461,6 @@ def _cache_invalidate(file_id: str) -> None:
 # ---------------------------------------------------------------------------
 
 
-def _check_file(path: str) -> None:
-    """前置校验：文件存在且为 PDF。"""
-    p = Path(path)
-    if not p.exists():
-        raise AppError(ErrorCode.FILE_NOT_FOUND, f"文件不存在: {path}")
-    if not p.is_file():
-        raise AppError(ErrorCode.FILE_NOT_FOUND, f"路径不是文件: {path}")
-    if p.suffix.lower() != ".pdf":
-        raise AppError(ErrorCode.FILE_NOT_PDF, f"不是 PDF 文件: {path}")
-
-
 def _build_camelot_kwargs(request: ExtractRequest) -> dict:
     """从请求中提取 camelot.read_pdf 的有效关键字参数。"""
     kwargs: dict = {
@@ -552,9 +541,8 @@ def _do_extract(file_path: str, request: ExtractRequest) -> ExtractResponse:
 
 
 def extract_tables(request: ExtractRequest) -> ExtractResponse:
-    """执行 PDF 表格提取，支持 file_path / file_id / file_url，带结果缓存。
+    """执行 PDF 表格提取，支持 file_id / file_url，带结果缓存。
 
-    - file_path 模式：直接使用本地路径，不走缓存（向后兼容）
     - file_id 模式：resolve 路径后，先查缓存再执行提取
     - file_url 模式：自动下载文件并注册，然后走 file_id 的缓存+提取流程
     """
@@ -591,11 +579,9 @@ def extract_tables(request: ExtractRequest) -> ExtractResponse:
             if result.success:
                 _cache_set(cache_key, result)
             return result
-        else:
-            # file_path 模式：传统方式
-            _check_file(request.file_path)
-            file_path = str(Path(request.file_path).resolve())
-            return _do_extract(file_path, request)
+
+        # 校验已保证 file_id / file_url 二选一，到此处说明既无 file_id 也无 file_url
+        raise AppError(ErrorCode.INTERNAL_ERROR, "未提供 file_id / file_url")
 
     except AppError as e:
         logger.warning("app error: [%s] %s", e.code.value, e.message)

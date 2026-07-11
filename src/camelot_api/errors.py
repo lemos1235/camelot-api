@@ -7,8 +7,6 @@ from enum import Enum
 
 class ErrorCode(str, Enum):
     """错误码枚举，作为响应中的 machine-readable 标识。"""
-    FILE_NOT_FOUND = "FILE_NOT_FOUND"
-    FILE_NOT_PDF = "FILE_NOT_PDF"
     FILE_TOO_LARGE = "FILE_TOO_LARGE"
     FILE_ID_NOT_FOUND = "FILE_ID_NOT_FOUND"
     NOT_A_PDF = "NOT_A_PDF"
