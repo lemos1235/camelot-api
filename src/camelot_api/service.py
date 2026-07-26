@@ -98,6 +98,83 @@ def init_service() -> None:
     _load_registry()
 
 
+def _entry_unavailable_reason(
+    info: dict,
+    now: datetime | None = None,
+    *,
+    check_path: bool = True,
+) -> str | None:
+    """返回注册文件不可用的原因；可用时返回 None。"""
+    cfg = get_config()
+    try:
+        created_at = datetime.fromisoformat(info["created_at"])
+    except (KeyError, TypeError, ValueError):
+        return "注册信息无效"
+
+    if cfg.upload_ttl_hours > 0:
+        current = now or datetime.now(tz=timezone.utc)
+        try:
+            if current > created_at + timedelta(hours=cfg.upload_ttl_hours):
+                return "文件已过期"
+        except TypeError:
+            return "注册信息无效"
+
+    if check_path:
+        try:
+            path = Path(info["path"])
+        except (KeyError, TypeError):
+            return "注册信息无效"
+        # 调用方持有注册表锁，使存活检查与后续去重或清理决策保持原子性。
+        if not path.exists():
+            return "文件已从磁盘删除"
+    return None
+
+
+def _discard_registry_entry_locked(file_id: str) -> dict | None:
+    """移除注册记录及其索引。调用方必须持有 _registry_lock。
+
+    磁盘删除也保留在临界区内，避免清理过程中同一 MD5 被重新注册。该 I/O 仅发生在
+    过期或异常记录的冷路径上。
+    """
+    info = _registry.pop(file_id, None)
+    if info is None:
+        return None
+
+    file_md5 = info.get("md5")
+    if file_md5 and _md5_index.get(file_md5) == file_id:
+        _md5_index.pop(file_md5, None)
+
+    try:
+        path = Path(info["path"])
+        if path.exists():
+            path.unlink()
+    except (KeyError, TypeError, OSError) as e:
+        logger.warning("failed to delete stale file %s: %s", file_id, e)
+
+    _cache_invalidate(file_id)
+    return info
+
+
+def _find_live_duplicate_locked(file_md5: str) -> tuple[str, dict] | None:
+    """查找可用的 MD5 重复项，并即时清除悬空或过期记录。"""
+    existing_id = _md5_index.get(file_md5)
+    if existing_id is None:
+        return None
+
+    info = _registry.get(existing_id)
+    reason = "注册记录不存在" if info is None else _entry_unavailable_reason(info)
+    if reason is None:
+        return existing_id, info
+
+    logger.info("md5 dedup stale: %s file_id=%s (%s)", file_md5, existing_id, reason)
+    if info is None:
+        _md5_index.pop(file_md5, None)
+    else:
+        _discard_registry_entry_locked(existing_id)
+    _save_registry()
+    return None
+
+
 # ---------------------------------------------------------------------------
 # 文件管理 API
 # ---------------------------------------------------------------------------
@@ -135,9 +212,9 @@ def save_upload(file: UploadFile) -> UploadResponse:
 
     # MD5 去重
     with _registry_lock:
-        if file_md5 in _md5_index:
-            existing_id = _md5_index[file_md5]
-            info = _registry[existing_id]
+        duplicate = _find_live_duplicate_locked(file_md5)
+        if duplicate is not None:
+            existing_id, info = duplicate
             logger.info("md5 dedup hit: %s → existing file_id=%s", file_md5, existing_id)
             return UploadResponse(
                 file_id=existing_id,
@@ -180,22 +257,18 @@ def save_upload(file: UploadFile) -> UploadResponse:
 
 def resolve_file(file_id: str) -> Path:
     """根据 file_id 解析文件路径，校验存在且未过期。"""
-    cfg = get_config()
     with _registry_lock:
         info = _registry.get(file_id)
-    if info is None:
-        raise AppError(ErrorCode.FILE_ID_NOT_FOUND, f"file_id 不存在: {file_id}")
+        if info is None:
+            raise AppError(ErrorCode.FILE_ID_NOT_FOUND, f"file_id 不存在: {file_id}")
 
-    # 检查 TTL
-    created_at = datetime.fromisoformat(info["created_at"])
-    if cfg.upload_ttl_hours > 0:
-        expires_at = created_at + timedelta(hours=cfg.upload_ttl_hours)
-        if datetime.now(tz=timezone.utc) > expires_at:
-            raise AppError(ErrorCode.FILE_ID_NOT_FOUND, f"文件已过期: {file_id}")
+        reason = _entry_unavailable_reason(info)
+        if reason is not None:
+            _discard_registry_entry_locked(file_id)
+            _save_registry()
+            raise AppError(ErrorCode.FILE_ID_NOT_FOUND, f"{reason}: {file_id}")
 
-    path = Path(info["path"])
-    if not path.exists():
-        raise AppError(ErrorCode.FILE_ID_NOT_FOUND, f"文件已从磁盘删除: {file_id}")
+        path = Path(info["path"])
 
     return path
 
@@ -236,23 +309,12 @@ def cleanup_expired_files() -> int:
 
     with _registry_lock:
         for fid, info in list(_registry.items()):
-            created_at = datetime.fromisoformat(info["created_at"])
-            if now > created_at + timedelta(hours=cfg.upload_ttl_hours):
+            reason = _entry_unavailable_reason(info, now=now, check_path=False)
+            if reason == "文件已过期":
                 expired_ids.append(fid)
 
         for fid in expired_ids:
-            info = _registry.pop(fid)
-            md5 = info.get("md5", "")
-            _md5_index.pop(md5, None)
-            # 删除磁盘文件
-            path = Path(info["path"])
-            try:
-                if path.exists():
-                    path.unlink()
-            except OSError as e:
-                logger.warning("cleanup: failed to delete %s: %s", path, e)
-            # 清除缓存
-            _cache_invalidate(fid)
+            _discard_registry_entry_locked(fid)
 
         if expired_ids:
             _save_registry()
@@ -360,9 +422,9 @@ def _download_from_url(file_url: str) -> tuple[str, Path]:
     filename = Path(urllib.parse.unquote(parsed.path)).name or "downloaded.pdf"
 
     with _registry_lock:
-        if file_md5 in _md5_index:
-            existing_id = _md5_index[file_md5]
-            info = _registry[existing_id]
+        duplicate = _find_live_duplicate_locked(file_md5)
+        if duplicate is not None:
+            existing_id, info = duplicate
             logger.info("md5 dedup hit: file_url → existing file_id=%s", existing_id)
             return (existing_id, Path(info["path"]))
 
@@ -552,13 +614,13 @@ def extract_tables(request: ExtractRequest) -> ExtractResponse:
             file_id, _ = _download_from_url(request.file_url)
 
             # 复用 file_id 的缓存和提取逻辑
+            file_path = str(resolve_file(file_id))
             cache_key = _make_cache_key(file_id, request)
             cached = _cache_get(cache_key)
             if cached is not None:
                 logger.info("cache hit: file_url → file_id=%s key=%s", file_id, cache_key[:12])
                 return cached
 
-            file_path = str(resolve_file(file_id))
             result = _do_extract(file_path, request)
 
             if result.success:
@@ -567,13 +629,13 @@ def extract_tables(request: ExtractRequest) -> ExtractResponse:
 
         if request.file_id:
             # file_id 模式：支持缓存
+            file_path = str(resolve_file(request.file_id))
             cache_key = _make_cache_key(request.file_id, request)
             cached = _cache_get(cache_key)
             if cached is not None:
                 logger.info("cache hit: file_id=%s key=%s", request.file_id, cache_key[:12])
                 return cached
 
-            file_path = str(resolve_file(request.file_id))
             result = _do_extract(file_path, request)
 
             if result.success:
