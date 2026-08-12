@@ -6,7 +6,6 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Literal
 
 from pydantic import BaseModel, Field, model_validator
 
@@ -37,7 +36,7 @@ class TableInfo(BaseModel):
     cols: int = Field(description="列数")
     accuracy: float = Field(description="解析精度 0-100")
     whitespace: float = Field(description="空白占比 0-100")
-    flavor: str = Field(description="实际使用的解析模式：lattice / stream")
+    flavor: str = Field(description="实际使用的解析模式，如 lattice / stream / network / hybrid / ml")
     order: int = Field(description="在当前页的检测顺序（从 0 开始）")
     bbox: BBox = Field(description="整个表格区域的边界框")
     cells: list[CellInfo] = Field(default_factory=list, description="所有单元格")
@@ -49,25 +48,42 @@ class ExtractRequest(BaseModel):
     file_id: str | None = Field(default=None, description="通过 /api/v1/files/upload 获取的文件 ID（与 file_url 二选一）")
     file_url: str | None = Field(default=None, description="可公开访问的 PDF 下载 URL（与 file_id 二选一），自动下载后提取")
     pages: str = Field(default="all", description="页码范围：'all' / '1' / '1-3' / '1,3,5'")
-    flavor: Literal["lattice", "stream"] = Field(default="lattice", description="lattice=有边框表格，stream=无边框表格")
+    flavor: str = Field(
+        default="lattice",
+        description=(
+            "解析模式，直接透传给 camelot.read_pdf，不做枚举限制。"
+            "camelot 内置支持 lattice(有边框) / stream(无边框) / network / hybrid / ml / auto，"
+            "具体以所安装的 camelot 版本为准，非法值由 camelot 自身报错。"
+        ),
+    )
 
     # 通用参数
     line_scale: int = Field(default=15, ge=1, description="线条缩放参数")
-    copy_text: list[str] | None = Field(default=None, description="文本替换规则 ['旧','新']")
-    shift_text: list[str] | None = Field(default=None, description="文本位置偏移 ['l','r','t','b']")
+    copy_text: list[str] | None = Field(default=None, description="文本替换规则 ['旧','新']（lattice / hybrid / ml）")
+    shift_text: list[str] | None = Field(default=None, description="文本位置偏移 ['l','r','t','b']（lattice / hybrid / ml）")
 
-    # lattice 专用
-    line_tol: int | None = Field(default=None, ge=1, description="lattice: 线条容差")
-    joint_tol: int | None = Field(default=None, ge=1, description="lattice: 连接点容差")
-    threshold_blocksize: int | None = Field(default=None, ge=1, description="lattice: 阈值块大小")
-    threshold_constant: int | None = Field(default=None, ge=1, description="lattice: 阈值常量")
-    iterations: int | None = Field(default=None, ge=0, description="lattice: 形态学迭代次数")
-    resolution: int | None = Field(default=None, ge=1, description="lattice: 分辨率")
+    # lattice / hybrid 专用
+    line_tol: int | None = Field(default=None, ge=1, description="lattice/hybrid: 线条容差")
+    joint_tol: int | None = Field(default=None, ge=1, description="lattice/hybrid: 连接点容差")
+    threshold_blocksize: int | None = Field(default=None, ge=1, description="lattice/hybrid: 阈值块大小")
+    threshold_constant: int | None = Field(default=None, ge=1, description="lattice/hybrid: 阈值常量")
+    iterations: int | None = Field(default=None, ge=0, description="lattice/hybrid: 形态学迭代次数")
+    resolution: int | None = Field(default=None, ge=1, description="lattice/hybrid/ml: 分辨率")
 
-    # stream 专用
-    edge_tol: int | None = Field(default=None, ge=1, description="stream: 边缘容差")
-    row_tol: int | None = Field(default=None, ge=1, description="stream: 行容差")
-    column_tol: int | None = Field(default=None, ge=1, description="stream: 列容差")
+    # stream / network / hybrid 专用
+    edge_tol: int | None = Field(default=None, ge=1, description="stream/network/hybrid: 边缘容差")
+    row_tol: int | None = Field(default=None, ge=1, description="stream/network/hybrid: 行容差")
+    column_tol: int | None = Field(default=None, ge=1, description="stream/network/hybrid: 列容差")
+
+    # ml 专用
+    device: str | None = Field(default=None, description="ml: 推理设备，如 'cpu' / 'cuda'")
+    structure_model: str | None = Field(default=None, description="ml: 表格结构识别模型名称/路径")
+    detection_model: str | None = Field(default=None, description="ml: 表格检测模型名称/路径")
+    detection_threshold: float | None = Field(default=None, ge=0, le=1, description="ml: 表格检测置信度阈值")
+    structure_threshold: float | None = Field(default=None, ge=0, le=1, description="ml: 结构识别置信度阈值")
+    crop_padding: int | None = Field(default=None, ge=0, description="ml: 裁剪表格区域时的留白像素")
+    ocr: bool | None = Field(default=None, description="ml: 是否对图像型 PDF 启用 OCR")
+    use_fallback: bool | None = Field(default=None, description="lattice/ml: 是否在解析失败时使用回退引擎")
 
     # 后处理
     strip_text: str | None = Field(default=None, description="要去除的文本字符")

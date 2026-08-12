@@ -456,34 +456,10 @@ def _download_from_url(file_url: str) -> tuple[str, Path]:
 
 def _make_cache_key(file_id: str, request: ExtractRequest) -> str:
     """基于 file_id + 所有提取参数生成缓存键。"""
-    # 将所有影响结果的参数序列化后做 hash
-    parts = [
-        file_id,
-        request.pages,
-        request.flavor,
-        str(request.line_scale),
-        str(request.split_text),
-        str(request.flag_size),
-        request.strip_text or "",
-        str(request.process_background),
-    ]
-    # lattice 参数
-    if request.flavor == "lattice":
-        parts += [
-            str(request.line_tol),
-            str(request.joint_tol),
-            str(request.threshold_blocksize),
-            str(request.threshold_constant),
-            str(request.iterations),
-            str(request.resolution),
-        ]
-    else:
-        parts += [
-            str(request.edge_tol),
-            str(request.row_tol),
-            str(request.column_tol),
-        ]
-    raw = ":".join(parts)
+    # 将所有影响结果的参数序列化后做 hash（直接用 model_dump 覆盖全部字段，
+    # 避免每新增一个 flavor 专用参数就要在这里同步维护一遍）
+    dump = request.model_dump(exclude={"file_id", "file_url"})
+    raw = json.dumps(dump, sort_keys=True, default=str)
     param_hash = hashlib.md5(raw.encode()).hexdigest()  # noqa: S324
     return f"{file_id}:{param_hash}"
 
@@ -524,29 +500,53 @@ def _cache_invalidate(file_id: str) -> None:
 
 
 def _build_camelot_kwargs(request: ExtractRequest) -> dict:
-    """从请求中提取 camelot.read_pdf 的有效关键字参数。"""
+    """从请求中提取 camelot.read_pdf 的有效关键字参数。
+
+    flavor 不做枚举限制，直接透传给 camelot；哪些附加参数生效由
+    camelot 自身按 flavor 校验（无关参数在此处就不会被塞入 kwargs，
+    避免出现 "xxx cannot be used with flavor=yyy" 报错）。
+    """
+    flavor = request.flavor
     kwargs: dict = {
-        "flavor": request.flavor,
+        "flavor": flavor,
         "split_text": request.split_text,
         "flag_size": request.flag_size,
         "strip_text": request.strip_text,
     }
-    if request.copy_text is not None:
-        kwargs["copy_text"] = request.copy_text
-    if request.shift_text is not None:
-        kwargs["shift_text"] = request.shift_text
-    if request.flavor == "lattice":
+
+    uses_lattice_params = flavor in ("lattice", "hybrid")
+    uses_stream_params = flavor in ("stream", "network", "hybrid")
+    uses_ml_params = flavor == "ml"
+
+    if uses_lattice_params or uses_ml_params:
+        if request.copy_text is not None:
+            kwargs["copy_text"] = request.copy_text
+        if request.shift_text is not None:
+            kwargs["shift_text"] = request.shift_text
+
+    if uses_lattice_params:
         kwargs["line_scale"] = request.line_scale
         kwargs["process_background"] = request.process_background
-        for key in ("line_tol", "joint_tol", "threshold_blocksize", "threshold_constant", "iterations", "resolution"):
+        for key in ("line_tol", "joint_tol", "threshold_blocksize", "threshold_constant", "iterations", "resolution", "use_fallback"):
             val = getattr(request, key)
             if val is not None:
                 kwargs[key] = val
-    if request.flavor == "stream":
+
+    if uses_stream_params:
         for key in ("edge_tol", "row_tol", "column_tol"):
             val = getattr(request, key)
             if val is not None:
                 kwargs[key] = val
+
+    if uses_ml_params:
+        for key in (
+            "resolution", "use_fallback", "device", "structure_model", "detection_model",
+            "detection_threshold", "structure_threshold", "crop_padding", "ocr",
+        ):
+            val = getattr(request, key)
+            if val is not None:
+                kwargs[key] = val
+
     return kwargs
 
 
