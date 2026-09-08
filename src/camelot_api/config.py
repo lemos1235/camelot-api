@@ -44,6 +44,7 @@ class Config:
     log_format: str
 
     default_flavor: str
+    default_engine: str
     fallback_to_stream: bool
     default_line_scale: int
     max_pdf_size_mb: int
@@ -126,6 +127,12 @@ def get_config() -> Config:
         log_level=_str("LOG_LEVEL", "log_level", "INFO", toml).upper(),
         log_format=_str("LOG_FORMAT", "log_format", "text", toml),
         default_flavor=_str("CAMELOT_DEFAULT_FLAVOR", "default_flavor", "lattice", toml),
+        default_engine=_str(
+            "CAMELOT_DEFAULT_ENGINE",
+            "default_engine",
+            _str("CAMELOT_ENGINE", "engine", "combined", toml),
+            toml,
+        ),
         fallback_to_stream=_bool("CAMELOT_FALLBACK_STREAM", "fallback_to_stream", True, toml),
         default_line_scale=_int("CAMELOT_LINE_SCALE", "line_scale", 15, toml),
         max_pdf_size_mb=_int("MAX_PDF_SIZE_MB", "max_pdf_size_mb", 200, toml),

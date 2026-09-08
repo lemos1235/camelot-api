@@ -44,6 +44,8 @@ def build_kwargs(args: argparse.Namespace) -> dict:
 
     if args.flavor == "lattice":
         kwargs["line_scale"] = args.line_scale
+        if getattr(args, "engine", None):
+            kwargs["engine"] = args.engine
         for key in ("line_tol", "joint_tol", "threshold_blocksize",
                      "threshold_constant", "iterations", "resolution"):
             val = getattr(args, key)
@@ -219,6 +221,8 @@ def main() -> None:
 
     # lattice 参数
     lg = parser.add_argument_group("lattice 参数")
+    lg.add_argument("--engine", choices=["combined", "raster", "vector"],
+                    help="线检测引擎: combined (默认) / raster / vector (仅 lattice)")
     lg.add_argument("--line-tol", type=int)
     lg.add_argument("--joint-tol", type=int)
     lg.add_argument("--threshold-blocksize", type=int)
@@ -248,6 +252,7 @@ def main() -> None:
     actual_flavor = args.flavor
     if tables.n == 0 and args.flavor == "lattice" and args.fallback:
         kwargs["flavor"] = "stream"
+        kwargs.pop("engine", None)
         kwargs.pop("line_scale", None)
         kwargs.pop("process_background", None)
         kwargs.pop("line_tol", None)

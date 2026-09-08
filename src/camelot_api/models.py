@@ -63,6 +63,10 @@ class ExtractRequest(BaseModel):
     shift_text: list[str] | None = Field(default=None, description="文本位置偏移 ['l','r','t','b']（lattice / hybrid / ml）")
 
     # lattice / hybrid 专用
+    engine: str | None = Field(
+        default=None,
+        description="lattice/hybrid: 线检测引擎 ('combined' / 'raster' / 'vector')，未指定时使用服务端默认配置",
+    )
     line_tol: int | None = Field(default=None, ge=1, description="lattice/hybrid: 线条容差")
     joint_tol: int | None = Field(default=None, ge=1, description="lattice/hybrid: 连接点容差")
     threshold_blocksize: int | None = Field(default=None, ge=1, description="lattice/hybrid: 阈值块大小")

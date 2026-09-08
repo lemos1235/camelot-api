@@ -46,6 +46,7 @@ uv run python tools/detect.py ./demo6.pdf --json | jq '.tables[].accuracy'
 | `--shift-text` | 文本偏移 |
 | `--process-background` | 处理背景（仅 lattice） |
 | `--fallback` | lattice 无结果时自动回退 stream |
+| `--engine` | 线检测引擎：`combined`（默认）/ `raster` / `vector`（仅 lattice） |
 | `--json` | JSON 格式输出 |
 | `--line-tol` / `--joint-tol` | lattice 容差参数 |
 | `--edge-tol` / `--row-tol` / `--column-tol` | stream 容差参数 |

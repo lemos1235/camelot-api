@@ -110,7 +110,8 @@ cp config.toml.example config.toml   # 可选，不改则用内置默认值
 | `workers` / `WORKERS` | `1` | worker 数量 |
 | `log_level` / `LOG_LEVEL` | `INFO` | 日志级别 |
 | `log_format` / `LOG_FORMAT` | `text` | 日志格式 (`text` / `json`) |
-| `default_flavor` / `CAMELOT_DEFAULT_FLAVOR` | `lattice` | 默认解析模式 |
+| `default_flavor` / `CAMELOT_DEFAULT_FLAVOR` | `lattice` | 默认解析模式 (`lattice` / `stream` / `network` / `hybrid` / `ml` / `auto`) |
+| `default_engine` / `CAMELOT_DEFAULT_ENGINE` | `combined` | 默认线检测引擎 (`combined` / `raster` / `vector`，仅 lattice/hybrid) |
 | `fallback_to_stream` / `CAMELOT_FALLBACK_STREAM` | `true` | lattice 无结果时回退 stream |
 | `line_scale` / `CAMELOT_LINE_SCALE` | `15` | 线条缩放参数 |
 | `max_pdf_size_mb` / `MAX_PDF_SIZE_MB` | `200` | PDF 大小基线 (MB)，作为上传 / 下载大小上限的默认值 |

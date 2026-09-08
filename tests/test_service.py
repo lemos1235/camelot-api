@@ -22,6 +22,7 @@ class FileDeduplicationTests(unittest.TestCase):
             upload_max_size_mb=10,
             upload_ttl_hours=1,
             cache_max_entries=10,
+            default_engine="combined",
         )
         self.config_patch = patch.object(service, "get_config", return_value=self.config)
         self.config_patch.start()
