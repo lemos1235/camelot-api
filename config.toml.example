@@ -12,7 +12,8 @@ log_level = "INFO"        # DEBUG / INFO / WARNING / ERROR
 log_format = "text"       # text / json
 
 # camelot
-default_flavor = "lattice"   # lattice / stream
+default_flavor = "lattice"   # lattice / stream / network / hybrid / ml / auto
+default_engine = "vector"  # combined / raster / vector (lattice/hybrid 线检测引擎)
 fallback_to_stream = true    # lattice 无结果时回退 stream
 line_scale = 15              # 线条缩放参数
 max_pdf_size_mb = 200        # PDF 大小基线 (MB)，作为上传 / 下载大小上限的默认值

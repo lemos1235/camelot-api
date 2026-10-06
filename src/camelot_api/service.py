@@ -464,6 +464,8 @@ def _make_cache_key(file_id: str, request: ExtractRequest) -> str:
     # 将所有影响结果的参数序列化后做 hash（直接用 model_dump 覆盖全部字段，
     # 避免每新增一个 flavor 专用参数就要在这里同步维护一遍）
     dump = request.model_dump(exclude={"file_id", "file_url"})
+    if request.flavor in ("lattice", "hybrid") and dump.get("engine") is None:
+        dump["engine"] = getattr(get_config(), "default_engine", "combined")
     raw = json.dumps(dump, sort_keys=True, default=str)
     param_hash = hashlib.md5(raw.encode()).hexdigest()  # noqa: S324
     return f"{file_id}:{param_hash}"
@@ -532,6 +534,9 @@ def _build_camelot_kwargs(request: ExtractRequest) -> dict:
     if uses_lattice_params:
         kwargs["line_scale"] = request.line_scale
         kwargs["process_background"] = request.process_background
+        engine = request.engine or getattr(get_config(), "default_engine", "combined")
+        if engine:
+            kwargs["engine"] = engine
         for key in ("line_tol", "joint_tol", "threshold_blocksize", "threshold_constant", "iterations", "resolution", "use_fallback"):
             val = getattr(request, key)
             if val is not None:
@@ -588,9 +593,14 @@ def _do_extract(file_path: str, request: ExtractRequest) -> ExtractResponse:
     config = get_config()
     start = time.perf_counter()
 
-    logger.info("start extract: %s pages=%s flavor=%s", file_path, request.pages, request.flavor)
-
     kwargs = _build_camelot_kwargs(request)
+    logger.info(
+        "start extract: %s pages=%s flavor=%s engine=%s",
+        file_path,
+        request.pages,
+        request.flavor,
+        kwargs.get("engine", "-"),
+    )
     with _extract_lock, managed_pdfium_backend():
         tables = camelot.read_pdf(file_path, pages=request.pages, **kwargs)
 
