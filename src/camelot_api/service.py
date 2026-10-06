@@ -30,8 +30,13 @@ from .models import (
     TableInfo,
     UploadResponse,
 )
+from .pdfium_backend import managed_pdfium_backend
 
 logger = get_logger("service")
+
+# PDFium 禁止跨线程并发调用，即使请求处理的是不同文档。
+# 所有 flavor 都经过同一把锁，覆盖自动选择解析器及 stream 回退等路径。
+_extract_lock = threading.Lock()
 
 # ---------------------------------------------------------------------------
 # 文件注册表（持久化到 JSON，内存加速查询）
@@ -586,7 +591,8 @@ def _do_extract(file_path: str, request: ExtractRequest) -> ExtractResponse:
     logger.info("start extract: %s pages=%s flavor=%s", file_path, request.pages, request.flavor)
 
     kwargs = _build_camelot_kwargs(request)
-    tables = camelot.read_pdf(file_path, pages=request.pages, **kwargs)
+    with _extract_lock, managed_pdfium_backend():
+        tables = camelot.read_pdf(file_path, pages=request.pages, **kwargs)
 
     actual_flavor = request.flavor
     if tables.n == 0 and request.flavor == "lattice" and config.fallback_to_stream:
@@ -594,7 +600,8 @@ def _do_extract(file_path: str, request: ExtractRequest) -> ExtractResponse:
         # 重建 kwargs，使用 stream flavor（避免 lattice 专属参数污染）
         stream_request = request.model_copy(update={"flavor": "stream"})
         kwargs = _build_camelot_kwargs(stream_request)
-        tables = camelot.read_pdf(file_path, pages=request.pages, **kwargs)
+        with _extract_lock, managed_pdfium_backend():
+            tables = camelot.read_pdf(file_path, pages=request.pages, **kwargs)
         actual_flavor = "stream"
 
     elapsed = time.perf_counter() - start
