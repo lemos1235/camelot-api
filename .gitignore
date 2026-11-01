@@ -31,3 +31,7 @@ config.toml
 # Logs
 *.log
 logs/
+
+# Custom
+.pi/
+*.pdf
