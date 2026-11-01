@@ -114,6 +114,7 @@ cp config.toml.example config.toml   # 可选，不改则用内置默认值
 | `default_engine` / `CAMELOT_DEFAULT_ENGINE` | `combined` | 默认线检测引擎 (`combined` / `raster` / `vector`，仅 lattice/hybrid) |
 | `fallback_to_stream` / `CAMELOT_FALLBACK_STREAM` | `true` | lattice 无结果时回退 stream |
 | `line_scale` / `CAMELOT_LINE_SCALE` | `15` | 线条缩放参数 |
+| `split_text` / `CAMELOT_SPLIT_TEXT` | `false` | 拆分跨单元格的文本行（仅在请求未显式指定 `split_text` 时生效）。文字贴满格子导致相邻列文字被合并成一行时开启；合并单元格不受影响 |
 | `max_pdf_size_mb` / `MAX_PDF_SIZE_MB` | `200` | PDF 大小基线 (MB)，作为上传 / 下载大小上限的默认值 |
 | `upload_dir` / `UPLOAD_DIR` | `~/.camelot-api/uploads` | 上传文件存储目录（`~` 自动展开） |
 | `upload_max_size_mb` / `UPLOAD_MAX_SIZE_MB` | `200` | 上传文件大小上限 (MB)，未设则复用 `max_pdf_size_mb` |

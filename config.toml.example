@@ -16,6 +16,9 @@ default_flavor = "lattice"   # lattice / stream / network / hybrid / ml / auto
 default_engine = "vector"  # combined / raster / vector (lattice/hybrid 线检测引擎)
 fallback_to_stream = true    # lattice 无结果时回退 stream
 line_scale = 15              # 线条缩放参数
+# 拆分跨单元格的文本行。文字几乎贴满格子时（间距小于一个字符宽）camelot 会把
+# 相邻单元格的文字合成一行，导致"串列"；开启后按真实格线切分。合并单元格不受影响。
+split_text = true
 max_pdf_size_mb = 200        # PDF 大小基线 (MB)，作为上传 / 下载大小上限的默认值
 
 # 上传

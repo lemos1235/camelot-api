@@ -466,6 +466,8 @@ def _make_cache_key(file_id: str, request: ExtractRequest) -> str:
     dump = request.model_dump(exclude={"file_id", "file_url"})
     if request.flavor in ("lattice", "hybrid") and dump.get("engine") is None:
         dump["engine"] = getattr(get_config(), "default_engine", "combined")
+    if dump.get("split_text") is None:
+        dump["split_text"] = getattr(get_config(), "default_split_text", False)
     raw = json.dumps(dump, sort_keys=True, default=str)
     param_hash = hashlib.md5(raw.encode()).hexdigest()  # noqa: S324
     return f"{file_id}:{param_hash}"
@@ -514,9 +516,13 @@ def _build_camelot_kwargs(request: ExtractRequest) -> dict:
     避免出现 "xxx cannot be used with flavor=yyy" 报错）。
     """
     flavor = request.flavor
+    # split_text 未显式指定时回退到服务端配置（默认关闭）
+    split_text = request.split_text
+    if split_text is None:
+        split_text = getattr(get_config(), "default_split_text", False)
     kwargs: dict = {
         "flavor": flavor,
-        "split_text": request.split_text,
+        "split_text": split_text,
         "flag_size": request.flag_size,
         "strip_text": request.strip_text,
     }

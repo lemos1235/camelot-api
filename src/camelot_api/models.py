@@ -91,7 +91,10 @@ class ExtractRequest(BaseModel):
 
     # 后处理
     strip_text: str | None = Field(default=None, description="要去除的文本字符")
-    split_text: bool = Field(default=False, description="是否拆分跨行文本")
+    split_text: bool | None = Field(
+        default=None,
+        description="是否拆分跨单元格文本；未指定时使用服务端配置 split_text（默认 false）",
+    )
     flag_size: bool = Field(default=False, description="是否检测字体大小（较慢）")
     process_background: bool = Field(default=False, description="是否处理背景")
 
